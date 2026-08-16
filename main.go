@@ -36,6 +36,9 @@ func main() {
 	case "printchain":
 		printBlockchain()
 
+	case "startnode":
+		startNode(os.Args[2:])
+
 	default:
 		fmt.Printf(
 			"Unknown command: %s\n\n",
@@ -56,6 +59,7 @@ func printUsage() {
 	fmt.Println("  fund --address ADDRESS --amount AMOUNT")
 	fmt.Println("  send --from ADDRESS --to ADDRESS --amount AMOUNT")
 	fmt.Println("  printchain")
+	fmt.Println("  startnode --port PORT")
 }
 
 // createWallet generates a new ECDSA wallet
@@ -82,6 +86,7 @@ func createWallet() {
 	}
 
 	fmt.Println("Wallet created successfully.")
+
 	fmt.Printf(
 		"Address: %s\n",
 		wallet.Address,
@@ -89,7 +94,7 @@ func createWallet() {
 }
 
 // getBalance prints the current balance
-// of an address.
+// of a blockchain address.
 func getBalance(args []string) {
 	command := flag.NewFlagSet(
 		"balance",
@@ -127,7 +132,7 @@ func getBalance(args []string) {
 }
 
 // fundAddress creates a coinbase transaction
-// that assigns coins to an address.
+// that assigns new coins to an address.
 func fundAddress(args []string) {
 	command := flag.NewFlagSet(
 		"fund",
@@ -371,6 +376,43 @@ func printBlockchain() {
 	}
 }
 
+// startNode starts the ChainForge HTTP node server.
+func startNode(args []string) {
+	command := flag.NewFlagSet(
+		"startnode",
+		flag.ExitOnError,
+	)
+
+	port := command.Int(
+		"port",
+		8080,
+		"HTTP node port",
+	)
+
+	if err := command.Parse(args); err != nil {
+		log.Fatal(err)
+	}
+
+	if *port <= 0 || *port > 65535 {
+		log.Fatal(
+			"port must be between 1 and 65535",
+		)
+	}
+
+	chain := openChain()
+	defer closeChain(chain)
+
+	server := blockchain.NewNodeServer(
+		chain,
+		*port,
+	)
+
+	if err := server.Start(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// openChain opens the persistent blockchain.
 func openChain() *blockchain.Blockchain {
 	chain, err := blockchain.OpenBlockchain(
 		databasePath,
@@ -383,9 +425,14 @@ func openChain() *blockchain.Blockchain {
 	return chain
 }
 
+// closeChain safely closes persistent storage.
 func closeChain(
 	chain *blockchain.Blockchain,
 ) {
+	if chain == nil {
+		return
+	}
+
 	if err := chain.Close(); err != nil {
 		log.Printf(
 			"failed to close blockchain: %v",
