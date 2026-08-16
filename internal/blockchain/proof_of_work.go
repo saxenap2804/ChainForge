@@ -17,9 +17,12 @@ type ProofOfWork struct {
 }
 
 // NewProofOfWork creates a proof-of-work instance
-// for the given block.
-func NewProofOfWork(block *Block) *ProofOfWork {
+// for the supplied block.
+func NewProofOfWork(
+	block *Block,
+) *ProofOfWork {
 	target := big.NewInt(1)
+
 	target.Lsh(
 		target,
 		uint(256-targetBits),
@@ -31,9 +34,13 @@ func NewProofOfWork(block *Block) *ProofOfWork {
 	}
 }
 
-// intToBytes converts an int64 into bytes.
-func intToBytes(num int64) []byte {
-	buffer := new(bytes.Buffer)
+// intToBytes converts an int64 to bytes.
+func intToBytes(
+	num int64,
+) []byte {
+	buffer := new(
+		bytes.Buffer,
+	)
 
 	_ = binary.Write(
 		buffer,
@@ -44,37 +51,75 @@ func intToBytes(num int64) []byte {
 	return buffer.Bytes()
 }
 
-// prepareData creates the byte sequence that is hashed
-// during mining.
-func (pow *ProofOfWork) prepareData(nonce int64) []byte {
+// hashTransactions combines all transaction hashes
+// into a single SHA-256 digest.
+func (pow *ProofOfWork) hashTransactions() []byte {
+	var transactionHashes []byte
+
+	for _, tx := range pow.block.Transactions {
+		transactionHashes = append(
+			transactionHashes,
+			tx.Hash()...,
+		)
+	}
+
+	hash := sha256.Sum256(
+		transactionHashes,
+	)
+
+	return hash[:]
+}
+
+// prepareData creates the byte sequence hashed
+// during Proof-of-Work mining.
+func (pow *ProofOfWork) prepareData(
+	nonce int64,
+) []byte {
 	return bytes.Join(
 		[][]byte{
 			pow.block.PrevBlockHash,
-			pow.block.Data,
-			intToBytes(pow.block.Timestamp),
-			intToBytes(int64(targetBits)),
-			intToBytes(nonce),
+			pow.hashTransactions(),
+			intToBytes(
+				pow.block.Timestamp,
+			),
+			intToBytes(
+				int64(targetBits),
+			),
+			intToBytes(
+				nonce,
+			),
 		},
 		[]byte{},
 	)
 }
 
-// Run searches for a nonce whose hash satisfies
-// the current difficulty target.
-func (pow *ProofOfWork) Run() (int64, []byte) {
+// Run searches for a nonce whose block hash
+// satisfies the current difficulty target.
+func (pow *ProofOfWork) Run() (
+	int64,
+	[]byte,
+) {
 	var hashInt big.Int
 	var hash [32]byte
 
 	var nonce int64
 
 	for nonce < math.MaxInt64 {
-		data := pow.prepareData(nonce)
+		data := pow.prepareData(
+			nonce,
+		)
 
-		hash = sha256.Sum256(data)
+		hash = sha256.Sum256(
+			data,
+		)
 
-		hashInt.SetBytes(hash[:])
+		hashInt.SetBytes(
+			hash[:],
+		)
 
-		if hashInt.Cmp(pow.target) == -1 {
+		if hashInt.Cmp(
+			pow.target,
+		) == -1 {
 			break
 		}
 
@@ -84,8 +129,8 @@ func (pow *ProofOfWork) Run() (int64, []byte) {
 	return nonce, hash[:]
 }
 
-// Validate verifies that the block's stored nonce
-// produces a hash below the required target.
+// Validate verifies that a block's stored nonce
+// still satisfies the Proof-of-Work requirement.
 func (pow *ProofOfWork) Validate() bool {
 	var hashInt big.Int
 
@@ -93,9 +138,15 @@ func (pow *ProofOfWork) Validate() bool {
 		pow.block.Nonce,
 	)
 
-	hash := sha256.Sum256(data)
+	hash := sha256.Sum256(
+		data,
+	)
 
-	hashInt.SetBytes(hash[:])
+	hashInt.SetBytes(
+		hash[:],
+	)
 
-	return hashInt.Cmp(pow.target) == -1
+	return hashInt.Cmp(
+		pow.target,
+	) == -1
 }

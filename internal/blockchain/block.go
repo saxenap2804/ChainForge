@@ -5,21 +5,20 @@ import "time"
 // Block represents a single block in the blockchain.
 type Block struct {
 	Timestamp     int64
-	Data          []byte
+	Transactions  []Transaction
 	PrevBlockHash []byte
 	Hash          []byte
 	Nonce         int64
 }
 
-// NewBlock creates a new block and mines it
-// using the Proof-of-Work algorithm.
+// NewBlock creates and mines a new block.
 func NewBlock(
-	data string,
+	transactions []Transaction,
 	prevBlockHash []byte,
 ) *Block {
 	block := &Block{
 		Timestamp:     time.Now().Unix(),
-		Data:          []byte(data),
+		Transactions:  transactions,
 		PrevBlockHash: prevBlockHash,
 		Hash:          []byte{},
 		Nonce:         0,
@@ -38,8 +37,20 @@ func NewBlock(
 // NewGenesisBlock creates the first block
 // in the blockchain.
 func NewGenesisBlock() *Block {
+	genesisTransaction, err := NewTransaction(
+		"network",
+		"genesis",
+		0,
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
 	return NewBlock(
-		"Genesis Block",
+		[]Transaction{
+			genesisTransaction,
+		},
 		[]byte{},
 	)
 }

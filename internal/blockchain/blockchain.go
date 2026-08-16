@@ -17,12 +17,13 @@ func NewBlockchain() *Blockchain {
 	}
 }
 
-// AddBlock appends a new mined block to the blockchain.
-func (bc *Blockchain) AddBlock(data string) {
+// AddBlock appends a new mined block containing
+// one or more transactions.
+func (bc *Blockchain) AddBlock(transactions []Transaction) {
 	previousBlock := bc.Blocks[len(bc.Blocks)-1]
 
 	newBlock := NewBlock(
-		data,
+		transactions,
 		previousBlock.Hash,
 	)
 
@@ -42,8 +43,7 @@ func (bc *Blockchain) IsValid() bool {
 		currentBlock := bc.Blocks[i]
 		previousBlock := bc.Blocks[i-1]
 
-		// Verify that this block references
-		// the actual hash of the previous block.
+		// Verify chain linkage.
 		if !bytes.Equal(
 			currentBlock.PrevBlockHash,
 			previousBlock.Hash,
@@ -51,8 +51,18 @@ func (bc *Blockchain) IsValid() bool {
 			return false
 		}
 
-		// Verify that the block still satisfies
-		// the Proof-of-Work requirement.
+		// Validate every transaction.
+		for _, tx := range currentBlock.Transactions {
+			if err := tx.Validate(); err != nil {
+				return false
+			}
+
+			if tx.ID != tx.calculateID() {
+				return false
+			}
+		}
+
+		// Validate Proof of Work.
 		pow := NewProofOfWork(currentBlock)
 
 		if !pow.Validate() {

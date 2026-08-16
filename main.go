@@ -6,54 +6,111 @@ import (
 	"github.com/saxenap2804/ChainForge/internal/blockchain"
 )
 
-// printChain displays every block in the blockchain.
-func printChain(chain *blockchain.Blockchain) {
+// printChain displays the complete blockchain.
+func printChain(
+	chain *blockchain.Blockchain,
+) {
 	fmt.Println("ChainForge")
 	fmt.Println("==========")
 
 	for index, block := range chain.Blocks {
-		fmt.Printf("\nBlock %d\n", index)
-		fmt.Printf("Timestamp: %d\n", block.Timestamp)
-		fmt.Printf("Data: %s\n", block.Data)
-		fmt.Printf("Previous Hash: %x\n", block.PrevBlockHash)
+		fmt.Printf(
+			"\nBlock %d\n",
+			index,
+		)
 
-		// Proof-of-Work nonce used to mine this block.
-		fmt.Printf("Nonce: %d\n", block.Nonce)
+		fmt.Printf(
+			"Timestamp: %d\n",
+			block.Timestamp,
+		)
 
-		fmt.Printf("Hash: %x\n", block.Hash)
+		fmt.Printf(
+			"Previous Hash: %x\n",
+			block.PrevBlockHash,
+		)
+
+		fmt.Printf(
+			"Nonce: %d\n",
+			block.Nonce,
+		)
+
+		fmt.Printf(
+			"Hash: %x\n",
+			block.Hash,
+		)
+
+		fmt.Println(
+			"Transactions:",
+		)
+
+		for _, tx := range block.Transactions {
+			fmt.Printf(
+				"  ID: %s\n",
+				tx.ID,
+			)
+
+			fmt.Printf(
+				"  %s -> %s : %.2f coins\n",
+				tx.Sender,
+				tx.Receiver,
+				tx.Amount,
+			)
+		}
 	}
 }
 
 func main() {
-	// Create a new blockchain containing the genesis block.
 	chain := blockchain.NewBlockchain()
 
-	// Add sample blocks.
+	tx1, err := blockchain.NewTransaction(
+		"Alice",
+		"Bob",
+		10,
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
+	tx2, err := blockchain.NewTransaction(
+		"Bob",
+		"Charlie",
+		4,
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
 	chain.AddBlock(
-		"Alice sends 10 coins to Bob",
+		[]blockchain.Transaction{
+			tx1,
+		},
 	)
 
 	chain.AddBlock(
-		"Bob sends 4 coins to Charlie",
+		[]blockchain.Transaction{
+			tx2,
+		},
 	)
 
-	// Display the blockchain.
-	printChain(chain)
+	printChain(
+		chain,
+	)
 
-	// Verify the blockchain before modification.
 	fmt.Printf(
 		"\nBlockchain valid before tampering: %t\n",
 		chain.IsValid(),
 	)
 
-	// Simulate malicious modification of an existing block.
-	fmt.Println("\nTampering with Block 1...")
-
-	chain.Blocks[1].Data = []byte(
-		"Alice sends 1000 coins to Mallory",
+	fmt.Println(
+		"\nTampering with Block 1...",
 	)
 
-	// The blockchain should now fail validation.
+	chain.Blocks[1].
+		Transactions[0].
+		Amount = 1000
+
 	fmt.Printf(
 		"Blockchain valid after tampering: %t\n",
 		chain.IsValid(),
