@@ -1,14 +1,19 @@
 package blockchain
 
-import "bytes"
+import (
+	"bytes"
+	"errors"
+)
 
-// Blockchain stores an ordered collection of blocks.
+// Blockchain stores an ordered collection of blocks
+// and optionally persists them using Storage.
 type Blockchain struct {
-	Blocks []*Block
+	Blocks  []*Block
+	Storage *Storage
 }
 
-// NewBlockchain creates a blockchain containing
-// the genesis block.
+// NewBlockchain creates an in-memory blockchain
+// containing the genesis block.
 func NewBlockchain() *Blockchain {
 	return &Blockchain{
 		Blocks: []*Block{
@@ -17,13 +22,91 @@ func NewBlockchain() *Blockchain {
 	}
 }
 
-// AddBlock validates transactions and appends
-// a newly mined block to the chain.
+// OpenBlockchain opens or creates a persistent blockchain.
+func OpenBlockchain(path string) (*Blockchain, error) {
+	storage, err := OpenStorage(path)
+	if err != nil {
+		return nil, err
+	}
+
+	chain := &Blockchain{
+		Storage: storage,
+	}
+
+	lastHash, err := storage.LastHash()
+
+	// No existing chain: create and persist genesis block.
+	if err != nil {
+		genesis := NewGenesisBlock()
+
+		if err := storage.SaveBlock(genesis); err != nil {
+			storage.Close()
+			return nil, err
+		}
+
+		chain.Blocks = []*Block{
+			genesis,
+		}
+
+		return chain, nil
+	}
+
+	// Existing chain: reconstruct it from disk.
+	var reversed []*Block
+	currentHash := lastHash
+
+	for len(currentHash) > 0 {
+		block, err := storage.LoadBlock(currentHash)
+		if err != nil {
+			storage.Close()
+			return nil, err
+		}
+
+		reversed = append(
+			reversed,
+			block,
+		)
+
+		currentHash = block.PrevBlockHash
+	}
+
+	// Reverse blocks into genesis -> latest order.
+	for i := len(reversed) - 1; i >= 0; i-- {
+		chain.Blocks = append(
+			chain.Blocks,
+			reversed[i],
+		)
+	}
+
+	if len(chain.Blocks) == 0 {
+		storage.Close()
+		return nil, errors.New(
+			"persistent blockchain contains no blocks",
+		)
+	}
+
+	return chain, nil
+}
+
+// Close closes persistent storage if enabled.
+func (bc *Blockchain) Close() error {
+	if bc.Storage == nil {
+		return nil
+	}
+
+	return bc.Storage.Close()
+}
+
+// AddBlock validates transactions, mines a block,
+// appends it to memory, and persists it when storage
+// is enabled.
 func (bc *Blockchain) AddBlock(
 	transactions []Transaction,
 ) error {
 	if len(transactions) == 0 {
-		return nil
+		return errors.New(
+			"block must contain at least one transaction",
+		)
 	}
 
 	for _, tx := range transactions {
@@ -38,6 +121,15 @@ func (bc *Blockchain) AddBlock(
 		transactions,
 		previousBlock.Hash,
 	)
+
+	// Persist before updating in-memory state.
+	if bc.Storage != nil {
+		if err := bc.Storage.SaveBlock(
+			newBlock,
+		); err != nil {
+			return err
+		}
+	}
 
 	bc.Blocks = append(
 		bc.Blocks,
