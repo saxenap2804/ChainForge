@@ -6,6 +6,7 @@ import (
 	"github.com/saxenap2804/ChainForge/internal/blockchain"
 )
 
+// printChain displays every block in the blockchain.
 func printChain(chain *blockchain.Blockchain) {
 	fmt.Println("ChainForge")
 	fmt.Println("==========")
@@ -15,13 +16,19 @@ func printChain(chain *blockchain.Blockchain) {
 		fmt.Printf("Timestamp: %d\n", block.Timestamp)
 		fmt.Printf("Data: %s\n", block.Data)
 		fmt.Printf("Previous Hash: %x\n", block.PrevBlockHash)
+
+		// Proof-of-Work nonce used to mine this block.
+		fmt.Printf("Nonce: %d\n", block.Nonce)
+
 		fmt.Printf("Hash: %x\n", block.Hash)
 	}
 }
 
 func main() {
+	// Create a new blockchain containing the genesis block.
 	chain := blockchain.NewBlockchain()
 
+	// Add sample blocks.
 	chain.AddBlock(
 		"Alice sends 10 coins to Bob",
 	)
@@ -30,8 +37,10 @@ func main() {
 		"Bob sends 4 coins to Charlie",
 	)
 
+	// Display the blockchain.
 	printChain(chain)
 
+	// Verify the blockchain before modification.
 	fmt.Printf(
 		"\nBlockchain valid before tampering: %t\n",
 		chain.IsValid(),
@@ -44,6 +53,7 @@ func main() {
 		"Alice sends 1000 coins to Mallory",
 	)
 
+	// The blockchain should now fail validation.
 	fmt.Printf(
 		"Blockchain valid after tampering: %t\n",
 		chain.IsValid(),

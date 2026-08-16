@@ -1,11 +1,6 @@
 package blockchain
 
-import (
-	"bytes"
-	"crypto/sha256"
-	"strconv"
-	"time"
-)
+import "time"
 
 // Block represents a single block in the blockchain.
 type Block struct {
@@ -13,40 +8,38 @@ type Block struct {
 	Data          []byte
 	PrevBlockHash []byte
 	Hash          []byte
+	Nonce         int64
 }
 
-// calculateHash computes the SHA-256 hash for a block.
-func (b *Block) calculateHash() []byte {
-	timestamp := []byte(strconv.FormatInt(b.Timestamp, 10))
-
-	headers := bytes.Join(
-		[][]byte{
-			b.PrevBlockHash,
-			b.Data,
-			timestamp,
-		},
-		[]byte{},
-	)
-
-	hash := sha256.Sum256(headers)
-
-	return hash[:]
-}
-
-// NewBlock creates a new block and calculates its hash.
-func NewBlock(data string, prevBlockHash []byte) *Block {
+// NewBlock creates a new block and mines it
+// using the Proof-of-Work algorithm.
+func NewBlock(
+	data string,
+	prevBlockHash []byte,
+) *Block {
 	block := &Block{
 		Timestamp:     time.Now().Unix(),
 		Data:          []byte(data),
 		PrevBlockHash: prevBlockHash,
+		Hash:          []byte{},
+		Nonce:         0,
 	}
 
-	block.Hash = block.calculateHash()
+	pow := NewProofOfWork(block)
+
+	nonce, hash := pow.Run()
+
+	block.Hash = hash
+	block.Nonce = nonce
 
 	return block
 }
 
-// NewGenesisBlock creates the first block in the chain.
+// NewGenesisBlock creates the first block
+// in the blockchain.
 func NewGenesisBlock() *Block {
-	return NewBlock("Genesis Block", []byte{})
+	return NewBlock(
+		"Genesis Block",
+		[]byte{},
+	)
 }

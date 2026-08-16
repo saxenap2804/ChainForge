@@ -7,8 +7,8 @@ type Blockchain struct {
 	Blocks []*Block
 }
 
-// NewBlockchain creates a new blockchain
-// containing the genesis block.
+// NewBlockchain creates a blockchain containing
+// the genesis block.
 func NewBlockchain() *Blockchain {
 	return &Blockchain{
 		Blocks: []*Block{
@@ -17,7 +17,7 @@ func NewBlockchain() *Blockchain {
 	}
 }
 
-// AddBlock appends a new block to the blockchain.
+// AddBlock appends a new mined block to the blockchain.
 func (bc *Blockchain) AddBlock(data string) {
 	previousBlock := bc.Blocks[len(bc.Blocks)-1]
 
@@ -42,8 +42,8 @@ func (bc *Blockchain) IsValid() bool {
 		currentBlock := bc.Blocks[i]
 		previousBlock := bc.Blocks[i-1]
 
-		// Verify the current block points to the
-		// actual hash of the previous block.
+		// Verify that this block references
+		// the actual hash of the previous block.
 		if !bytes.Equal(
 			currentBlock.PrevBlockHash,
 			previousBlock.Hash,
@@ -51,14 +51,11 @@ func (bc *Blockchain) IsValid() bool {
 			return false
 		}
 
-		// Recalculate the current block's hash
-		// and make sure its stored hash is valid.
-		expectedHash := currentBlock.calculateHash()
+		// Verify that the block still satisfies
+		// the Proof-of-Work requirement.
+		pow := NewProofOfWork(currentBlock)
 
-		if !bytes.Equal(
-			currentBlock.Hash,
-			expectedHash,
-		) {
+		if !pow.Validate() {
 			return false
 		}
 	}
