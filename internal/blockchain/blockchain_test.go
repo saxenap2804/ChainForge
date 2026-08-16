@@ -107,35 +107,78 @@ func TestAddBlock(
 ) {
 	chain := NewBlockchain()
 
-	tx := mustTransaction(
-		t,
-		"Alice",
-		"Bob",
+	alice, err := NewWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bob, err := NewWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Fund Alice first.
+	reward, err := NewCoinbaseTransaction(
+		alice.Address,
+		50,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := chain.AddBlock(
+		[]Transaction{
+			reward,
+		},
+	); err != nil {
+		t.Fatalf(
+			"failed to add funding block: %v",
+			err,
+		)
+	}
+
+	tx, err := NewTransaction(
+		alice.Address,
+		bob.Address,
 		10,
 	)
 
-	chain.AddBlock(
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Sign(alice); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := chain.AddBlock(
 		[]Transaction{
 			tx,
 		},
-	)
-
-	if len(chain.Blocks) != 2 {
+	); err != nil {
 		t.Fatalf(
-			"expected 2 blocks, got %d",
+			"failed to add transaction block: %v",
+			err,
+		)
+	}
+
+	if len(chain.Blocks) != 3 {
+		t.Fatalf(
+			"expected 3 blocks, got %d",
 			len(chain.Blocks),
 		)
 	}
 
-	previous := chain.Blocks[0]
-	current := chain.Blocks[1]
+	previous := chain.Blocks[1]
+	current := chain.Blocks[2]
 
 	if !bytes.Equal(
 		current.PrevBlockHash,
 		previous.Hash,
 	) {
 		t.Fatal(
-			"block does not reference previous block",
+			"new block does not reference previous block hash",
 		)
 	}
 }
@@ -220,6 +263,24 @@ func TestBlockchainDetectsTampering(
 		t.Fatal(err)
 	}
 
+	// Give Alice enough funds.
+	reward, err := NewCoinbaseTransaction(
+		alice.Address,
+		50,
+	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := chain.AddBlock(
+		[]Transaction{
+			reward,
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	tx, err := NewTransaction(
 		alice.Address,
 		bob.Address,
@@ -234,11 +295,13 @@ func TestBlockchainDetectsTampering(
 		t.Fatal(err)
 	}
 
-	chain.AddBlock(
+	if err := chain.AddBlock(
 		[]Transaction{
 			tx,
 		},
-	)
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	if !chain.IsValid() {
 		t.Fatal(
@@ -246,7 +309,7 @@ func TestBlockchainDetectsTampering(
 		)
 	}
 
-	chain.Blocks[1].
+	chain.Blocks[2].
 		Transactions[0].
 		Amount = 1000
 

@@ -6,65 +6,31 @@ import (
 	"github.com/saxenap2804/ChainForge/internal/blockchain"
 )
 
-func printChain(
-	chain *blockchain.Blockchain,
-) {
+func printChain(chain *blockchain.Blockchain) {
 	fmt.Println("ChainForge")
 	fmt.Println("==========")
 
 	for index, block := range chain.Blocks {
 		fmt.Printf("\nBlock %d\n", index)
-
-		fmt.Printf(
-			"Timestamp: %d\n",
-			block.Timestamp,
-		)
-
-		fmt.Printf(
-			"Previous Hash: %x\n",
-			block.PrevBlockHash,
-		)
-
-		fmt.Printf(
-			"Nonce: %d\n",
-			block.Nonce,
-		)
-
-		fmt.Printf(
-			"Hash: %x\n",
-			block.Hash,
-		)
+		fmt.Printf("Timestamp: %d\n", block.Timestamp)
+		fmt.Printf("Previous Hash: %x\n", block.PrevBlockHash)
+		fmt.Printf("Nonce: %d\n", block.Nonce)
+		fmt.Printf("Hash: %x\n", block.Hash)
 
 		fmt.Println("Transactions:")
 
 		for _, tx := range block.Transactions {
-			fmt.Printf(
-				"  ID: %s\n",
-				tx.ID,
-			)
-
 			fmt.Printf(
 				"  %s -> %s : %.2f coins\n",
 				tx.Sender,
 				tx.Receiver,
 				tx.Amount,
 			)
-
-			if len(tx.Signature) > 0 {
-				fmt.Println(
-					"  Signature: verified",
-				)
-			} else {
-				fmt.Println(
-					"  Signature: genesis",
-				)
-			}
 		}
 	}
 }
 
 func main() {
-	// Create wallets.
 	alice, err := blockchain.NewWallet()
 	if err != nil {
 		panic(err)
@@ -80,16 +46,26 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("Wallets")
-	fmt.Println("=======")
-	fmt.Printf("Alice:   %s\n", alice.Address)
-	fmt.Printf("Bob:     %s\n", bob.Address)
-	fmt.Printf("Charlie: %s\n\n", charlie.Address)
-
-	// Create blockchain.
 	chain := blockchain.NewBlockchain()
 
-	// Alice -> Bob.
+	// Give Alice starting funds.
+	reward, err := blockchain.NewCoinbaseTransaction(
+		alice.Address,
+		50,
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if err := chain.AddBlock(
+		[]blockchain.Transaction{
+			reward,
+		},
+	); err != nil {
+		panic(err)
+	}
+
 	tx1, err := blockchain.NewTransaction(
 		alice.Address,
 		bob.Address,
@@ -104,7 +80,14 @@ func main() {
 		panic(err)
 	}
 
-	// Bob -> Charlie.
+	if err := chain.AddBlock(
+		[]blockchain.Transaction{
+			tx1,
+		},
+	); err != nil {
+		panic(err)
+	}
+
 	tx2, err := blockchain.NewTransaction(
 		bob.Address,
 		charlie.Address,
@@ -119,35 +102,68 @@ func main() {
 		panic(err)
 	}
 
-	// Mine transactions into blocks.
-	chain.AddBlock(
-		[]blockchain.Transaction{
-			tx1,
-		},
-	)
-
-	chain.AddBlock(
+	if err := chain.AddBlock(
 		[]blockchain.Transaction{
 			tx2,
 		},
-	)
+	); err != nil {
+		panic(err)
+	}
 
 	printChain(chain)
 
+	fmt.Println("\nBalances")
+	fmt.Println("========")
+
 	fmt.Printf(
-		"\nBlockchain valid before tampering: %t\n",
+		"Alice: %.2f\n",
+		chain.BalanceOf(alice.Address),
+	)
+
+	fmt.Printf(
+		"Bob: %.2f\n",
+		chain.BalanceOf(bob.Address),
+	)
+
+	fmt.Printf(
+		"Charlie: %.2f\n",
+		chain.BalanceOf(charlie.Address),
+	)
+
+	fmt.Printf(
+		"\nBlockchain valid: %t\n",
 		chain.IsValid(),
 	)
 
-	// Demonstrate signature + blockchain tamper detection.
-	fmt.Println("\nTampering with Alice's transaction...")
-
-	chain.Blocks[1].
-		Transactions[0].
-		Amount = 1000
-
-	fmt.Printf(
-		"Blockchain valid after tampering: %t\n",
-		chain.IsValid(),
+	// Try to overspend.
+	fmt.Println(
+		"\nAttempting invalid overspend from Bob...",
 	)
+
+	badTx, err := blockchain.NewTransaction(
+		bob.Address,
+		charlie.Address,
+		100,
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if err := badTx.Sign(bob); err != nil {
+		panic(err)
+	}
+
+	err = chain.AddBlock(
+		[]blockchain.Transaction{
+			badTx,
+		},
+	)
+
+	if err != nil {
+		fmt.Printf(
+			"Overspend rejected: %v\n",
+			err,
+		)
+	}
 }

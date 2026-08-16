@@ -7,7 +7,8 @@ type Blockchain struct {
 	Blocks []*Block
 }
 
-// NewBlockchain creates a blockchain containing the genesis block.
+// NewBlockchain creates a blockchain containing
+// the genesis block.
 func NewBlockchain() *Blockchain {
 	return &Blockchain{
 		Blocks: []*Block{
@@ -16,10 +17,21 @@ func NewBlockchain() *Blockchain {
 	}
 }
 
-// AddBlock appends a new mined block containing transactions.
+// AddBlock validates transactions and appends
+// a newly mined block to the chain.
 func (bc *Blockchain) AddBlock(
 	transactions []Transaction,
-) {
+) error {
+	if len(transactions) == 0 {
+		return nil
+	}
+
+	for _, tx := range transactions {
+		if err := bc.ValidateTransaction(tx); err != nil {
+			return err
+		}
+	}
+
 	previousBlock := bc.Blocks[len(bc.Blocks)-1]
 
 	newBlock := NewBlock(
@@ -31,9 +43,12 @@ func (bc *Blockchain) AddBlock(
 		bc.Blocks,
 		newBlock,
 	)
+
+	return nil
 }
 
-// IsValid verifies the integrity of the blockchain.
+// IsValid verifies chain linkage, transaction
+// integrity, signatures, and Proof of Work.
 func (bc *Blockchain) IsValid() bool {
 	if len(bc.Blocks) == 0 {
 		return false
@@ -43,7 +58,6 @@ func (bc *Blockchain) IsValid() bool {
 		currentBlock := bc.Blocks[i]
 		previousBlock := bc.Blocks[i-1]
 
-		// Verify chain linkage.
 		if !bytes.Equal(
 			currentBlock.PrevBlockHash,
 			previousBlock.Hash,
@@ -51,26 +65,23 @@ func (bc *Blockchain) IsValid() bool {
 			return false
 		}
 
-		// Validate every transaction.
 		for _, tx := range currentBlock.Transactions {
 			if err := tx.Validate(); err != nil {
 				return false
 			}
 
-			// Verify deterministic transaction ID.
 			if tx.ID != tx.calculateID() {
 				return false
 			}
 
-			// Every non-genesis transaction must
-			// contain a valid digital signature.
-			if !tx.Verify() {
+			if !tx.IsCoinbase() && !tx.Verify() {
 				return false
 			}
 		}
 
-		// Validate Proof of Work.
-		pow := NewProofOfWork(currentBlock)
+		pow := NewProofOfWork(
+			currentBlock,
+		)
 
 		if !pow.Validate() {
 			return false

@@ -23,7 +23,7 @@ type Transaction struct {
 	Signature []byte  `json:"signature,omitempty"`
 }
 
-// NewTransaction creates and validates a transaction.
+// NewTransaction creates and validates a normal transaction.
 func NewTransaction(
 	sender string,
 	receiver string,
@@ -44,7 +44,39 @@ func NewTransaction(
 	return tx, nil
 }
 
-// Validate checks basic transaction rules.
+// NewCoinbaseTransaction creates new coins
+// and assigns them to a recipient.
+//
+// Coinbase transactions are issued by the network
+// and do not require a sender signature.
+func NewCoinbaseTransaction(
+	receiver string,
+	amount float64,
+) (Transaction, error) {
+	receiver = strings.TrimSpace(receiver)
+
+	if receiver == "" {
+		return Transaction{},
+			errors.New("receiver cannot be empty")
+	}
+
+	if amount <= 0 {
+		return Transaction{},
+			errors.New("coinbase amount must be positive")
+	}
+
+	tx := Transaction{
+		Sender:   "network",
+		Receiver: receiver,
+		Amount:   amount,
+	}
+
+	tx.ID = tx.calculateID()
+
+	return tx, nil
+}
+
+// Validate checks the basic transaction rules.
 func (tx Transaction) Validate() error {
 	if tx.Sender == "" {
 		return errors.New("sender cannot be empty")
@@ -55,19 +87,31 @@ func (tx Transaction) Validate() error {
 	}
 
 	if tx.Sender == tx.Receiver {
-		return errors.New("sender and receiver cannot be the same")
+		return errors.New(
+			"sender and receiver cannot be the same",
+		)
 	}
 
 	if tx.Amount < 0 {
-		return errors.New("amount cannot be negative")
+		return errors.New(
+			"amount cannot be negative",
+		)
 	}
 
 	return nil
 }
 
+// IsCoinbase reports whether this transaction
+// was issued by the network.
+func (tx Transaction) IsCoinbase() bool {
+	return tx.Sender == "network"
+}
+
 // Serialize returns the canonical transaction payload.
-// ID, signature, and public key are excluded so signing
-// remains deterministic.
+//
+// ID, public key, and signature are intentionally
+// excluded so the payload remains stable for hashing
+// and signing.
 func (tx Transaction) Serialize() []byte {
 	copyTx := tx
 
@@ -84,7 +128,8 @@ func (tx Transaction) Serialize() []byte {
 	return data
 }
 
-// calculateID generates the deterministic transaction ID.
+// calculateID generates a deterministic SHA-256
+// identifier from the transaction contents.
 func (tx Transaction) calculateID() string {
 	hash := sha256.Sum256(
 		tx.Serialize(),
@@ -95,7 +140,8 @@ func (tx Transaction) calculateID() string {
 	)
 }
 
-// Hash returns the transaction payload hash.
+// Hash returns the SHA-256 hash of the canonical
+// transaction payload.
 func (tx Transaction) Hash() []byte {
 	hash := sha256.Sum256(
 		tx.Serialize(),
@@ -104,10 +150,27 @@ func (tx Transaction) Hash() []byte {
 	return hash[:]
 }
 
-// Sign signs the transaction using the sender's wallet.
-func (tx *Transaction) Sign(wallet *Wallet) error {
-	if wallet == nil || wallet.PrivateKey == nil {
-		return errors.New("invalid wallet")
+// Sign signs a normal transaction with the
+// sender wallet's ECDSA private key.
+func (tx *Transaction) Sign(
+	wallet *Wallet,
+) error {
+	if tx.IsCoinbase() {
+		return errors.New(
+			"coinbase transactions do not require signatures",
+		)
+	}
+
+	if wallet == nil {
+		return errors.New(
+			"wallet cannot be nil",
+		)
+	}
+
+	if wallet.PrivateKey == nil {
+		return errors.New(
+			"wallet private key cannot be nil",
+		)
 	}
 
 	if tx.Sender != wallet.Address {
@@ -128,25 +191,55 @@ func (tx *Transaction) Sign(wallet *Wallet) error {
 		return err
 	}
 
-	signature := append(
-		r.Bytes(),
-		s.Bytes()...,
+	// Encode R and S using fixed 32-byte fields.
+	// This avoids ambiguity when either integer
+	// contains leading zero bytes.
+	signature := make(
+		[]byte,
+		64,
 	)
 
-	tx.PublicKey = wallet.PublicKey
+	rBytes := r.Bytes()
+	sBytes := s.Bytes()
+
+	copy(
+		signature[32-len(rBytes):32],
+		rBytes,
+	)
+
+	copy(
+		signature[64-len(sBytes):],
+		sBytes,
+	)
+
+	tx.PublicKey = append(
+		[]byte(nil),
+		wallet.PublicKey...,
+	)
+
 	tx.Signature = signature
+
+	// The ID is based on the unsigned payload,
+	// so this remains deterministic.
 	tx.ID = tx.calculateID()
 
 	return nil
 }
 
-// Verify checks the ECDSA signature of a transaction.
+// Verify checks the ECDSA signature of
+// a normal transaction.
 func (tx Transaction) Verify() bool {
+	// Coinbase transactions are handled separately
+	// by blockchain-level validation.
+	if tx.IsCoinbase() {
+		return false
+	}
+
 	if len(tx.PublicKey) == 0 {
 		return false
 	}
 
-	if len(tx.Signature) == 0 {
+	if len(tx.Signature) != 64 {
 		return false
 	}
 
@@ -165,18 +258,12 @@ func (tx Transaction) Verify() bool {
 		Y:     y,
 	}
 
-	if len(tx.Signature)%2 != 0 {
-		return false
-	}
-
-	half := len(tx.Signature) / 2
-
 	r := new(big.Int).SetBytes(
-		tx.Signature[:half],
+		tx.Signature[:32],
 	)
 
 	s := new(big.Int).SetBytes(
-		tx.Signature[half:],
+		tx.Signature[32:],
 	)
 
 	return ecdsa.Verify(
