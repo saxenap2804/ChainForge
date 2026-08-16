@@ -6,7 +6,6 @@ import (
 	"github.com/saxenap2804/ChainForge/internal/blockchain"
 )
 
-// printChain displays the complete blockchain.
 func printChain(
 	chain *blockchain.Blockchain,
 ) {
@@ -14,10 +13,7 @@ func printChain(
 	fmt.Println("==========")
 
 	for index, block := range chain.Blocks {
-		fmt.Printf(
-			"\nBlock %d\n",
-			index,
-		)
+		fmt.Printf("\nBlock %d\n", index)
 
 		fmt.Printf(
 			"Timestamp: %d\n",
@@ -39,9 +35,7 @@ func printChain(
 			block.Hash,
 		)
 
-		fmt.Println(
-			"Transactions:",
-		)
+		fmt.Println("Transactions:")
 
 		for _, tx := range block.Transactions {
 			fmt.Printf(
@@ -55,16 +49,50 @@ func printChain(
 				tx.Receiver,
 				tx.Amount,
 			)
+
+			if len(tx.Signature) > 0 {
+				fmt.Println(
+					"  Signature: verified",
+				)
+			} else {
+				fmt.Println(
+					"  Signature: genesis",
+				)
+			}
 		}
 	}
 }
 
 func main() {
+	// Create wallets.
+	alice, err := blockchain.NewWallet()
+	if err != nil {
+		panic(err)
+	}
+
+	bob, err := blockchain.NewWallet()
+	if err != nil {
+		panic(err)
+	}
+
+	charlie, err := blockchain.NewWallet()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Wallets")
+	fmt.Println("=======")
+	fmt.Printf("Alice:   %s\n", alice.Address)
+	fmt.Printf("Bob:     %s\n", bob.Address)
+	fmt.Printf("Charlie: %s\n\n", charlie.Address)
+
+	// Create blockchain.
 	chain := blockchain.NewBlockchain()
 
+	// Alice -> Bob.
 	tx1, err := blockchain.NewTransaction(
-		"Alice",
-		"Bob",
+		alice.Address,
+		bob.Address,
 		10,
 	)
 
@@ -72,9 +100,14 @@ func main() {
 		panic(err)
 	}
 
+	if err := tx1.Sign(alice); err != nil {
+		panic(err)
+	}
+
+	// Bob -> Charlie.
 	tx2, err := blockchain.NewTransaction(
-		"Bob",
-		"Charlie",
+		bob.Address,
+		charlie.Address,
 		4,
 	)
 
@@ -82,6 +115,11 @@ func main() {
 		panic(err)
 	}
 
+	if err := tx2.Sign(bob); err != nil {
+		panic(err)
+	}
+
+	// Mine transactions into blocks.
 	chain.AddBlock(
 		[]blockchain.Transaction{
 			tx1,
@@ -94,18 +132,15 @@ func main() {
 		},
 	)
 
-	printChain(
-		chain,
-	)
+	printChain(chain)
 
 	fmt.Printf(
 		"\nBlockchain valid before tampering: %t\n",
 		chain.IsValid(),
 	)
 
-	fmt.Println(
-		"\nTampering with Block 1...",
-	)
+	// Demonstrate signature + blockchain tamper detection.
+	fmt.Println("\nTampering with Alice's transaction...")
 
 	chain.Blocks[1].
 		Transactions[0].

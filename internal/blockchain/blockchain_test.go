@@ -139,25 +139,53 @@ func TestAddBlock(
 		)
 	}
 }
-
 func TestBlockchainIsValid(
 	t *testing.T,
 ) {
 	chain := NewBlockchain()
 
-	tx1 := mustTransaction(
-		t,
-		"Alice",
-		"Bob",
+	alice, err := NewWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bob, err := NewWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	charlie, err := NewWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx1, err := NewTransaction(
+		alice.Address,
+		bob.Address,
 		10,
 	)
 
-	tx2 := mustTransaction(
-		t,
-		"Bob",
-		"Charlie",
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx1.Sign(alice); err != nil {
+		t.Fatal(err)
+	}
+
+	tx2, err := NewTransaction(
+		bob.Address,
+		charlie.Address,
 		4,
 	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx2.Sign(bob); err != nil {
+		t.Fatal(err)
+	}
 
 	chain.AddBlock(
 		[]Transaction{
@@ -177,24 +205,46 @@ func TestBlockchainIsValid(
 		)
 	}
 }
-
 func TestBlockchainDetectsTampering(
 	t *testing.T,
 ) {
 	chain := NewBlockchain()
 
-	tx := mustTransaction(
-		t,
-		"Alice",
-		"Bob",
+	alice, err := NewWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bob, err := NewWallet()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := NewTransaction(
+		alice.Address,
+		bob.Address,
 		10,
 	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := tx.Sign(alice); err != nil {
+		t.Fatal(err)
+	}
 
 	chain.AddBlock(
 		[]Transaction{
 			tx,
 		},
 	)
+
+	if !chain.IsValid() {
+		t.Fatal(
+			"expected blockchain to be valid before tampering",
+		)
+	}
 
 	chain.Blocks[1].
 		Transactions[0].
@@ -206,7 +256,6 @@ func TestBlockchainDetectsTampering(
 		)
 	}
 }
-
 func TestBlockHashChangesWithTransactions(
 	t *testing.T,
 ) {

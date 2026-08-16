@@ -7,8 +7,7 @@ type Blockchain struct {
 	Blocks []*Block
 }
 
-// NewBlockchain creates a blockchain containing
-// the genesis block.
+// NewBlockchain creates a blockchain containing the genesis block.
 func NewBlockchain() *Blockchain {
 	return &Blockchain{
 		Blocks: []*Block{
@@ -17,9 +16,10 @@ func NewBlockchain() *Blockchain {
 	}
 }
 
-// AddBlock appends a new mined block containing
-// one or more transactions.
-func (bc *Blockchain) AddBlock(transactions []Transaction) {
+// AddBlock appends a new mined block containing transactions.
+func (bc *Blockchain) AddBlock(
+	transactions []Transaction,
+) {
 	previousBlock := bc.Blocks[len(bc.Blocks)-1]
 
 	newBlock := NewBlock(
@@ -57,7 +57,14 @@ func (bc *Blockchain) IsValid() bool {
 				return false
 			}
 
+			// Verify deterministic transaction ID.
 			if tx.ID != tx.calculateID() {
+				return false
+			}
+
+			// Every non-genesis transaction must
+			// contain a valid digital signature.
+			if !tx.Verify() {
 				return false
 			}
 		}
