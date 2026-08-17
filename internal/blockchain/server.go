@@ -66,6 +66,11 @@ func (server *NodeServer) Start() error {
 		server.handleBlocks,
 	)
 
+	mux.HandleFunc(
+		"/transactions",
+		server.handleTransaction,
+	)
+
 	address := fmt.Sprintf(
 		":%d",
 		server.Port,
@@ -82,7 +87,7 @@ func (server *NodeServer) Start() error {
 	)
 }
 
-// handleHealth returns basic node health information.
+// handleHealth returns basic node status.
 func (server *NodeServer) handleHealth(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -132,7 +137,7 @@ func (server *NodeServer) handleChain(
 	)
 }
 
-// handlePeers manages the local peer registry.
+// handlePeers manages the peer list.
 //
 // GET  /peers
 // POST /peers
@@ -194,8 +199,8 @@ func (server *NodeServer) handlePeers(
 	}
 }
 
-// handleFund creates a coinbase transaction,
-// mines a local block, then broadcasts that block.
+// handleFund creates a network-issued coinbase transaction,
+// mines it locally, and broadcasts the new block.
 func (server *NodeServer) handleFund(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -293,6 +298,98 @@ func (server *NodeServer) handleFund(
 	)
 }
 
+// handleTransaction accepts a fully signed
+// wallet-to-wallet transaction.
+//
+// POST /transactions
+func (server *NodeServer) handleTransaction(
+	writer http.ResponseWriter,
+	request *http.Request,
+) {
+	if request.Method != http.MethodPost {
+		http.Error(
+			writer,
+			"method not allowed",
+			http.StatusMethodNotAllowed,
+		)
+		return
+	}
+
+	var tx Transaction
+
+	if err := json.NewDecoder(
+		request.Body,
+	).Decode(&tx); err != nil {
+		http.Error(
+			writer,
+			"invalid transaction payload",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	if tx.IsCoinbase() {
+		http.Error(
+			writer,
+			"coinbase transactions are not allowed on this endpoint",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	if err := server.Chain.ValidateTransaction(
+		tx,
+	); err != nil {
+		http.Error(
+			writer,
+			err.Error(),
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	if tx.ID != tx.calculateID() {
+		http.Error(
+			writer,
+			"invalid transaction ID",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	if err := server.Chain.AddBlock(
+		[]Transaction{
+			tx,
+		},
+	); err != nil {
+		http.Error(
+			writer,
+			err.Error(),
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	newBlock := server.Chain.Blocks[len(server.Chain.Blocks)-1]
+
+	server.broadcastBlock(
+		newBlock,
+	)
+
+	writeJSON(
+		writer,
+		http.StatusCreated,
+		map[string]any{
+			"status": "accepted",
+			"id":     tx.ID,
+			"from":   tx.Sender,
+			"to":     tx.Receiver,
+			"amount": tx.Amount,
+			"blocks": len(server.Chain.Blocks),
+		},
+	)
+}
+
 // handleBlocks receives a newly mined block
 // from another peer.
 //
@@ -351,7 +448,7 @@ func (server *NodeServer) handleBlocks(
 }
 
 // acceptBlock validates and appends a block
-// received from a peer.
+// received from another peer.
 func (server *NodeServer) acceptBlock(
 	block *Block,
 ) error {
@@ -422,8 +519,8 @@ func (server *NodeServer) acceptBlock(
 	return nil
 }
 
-// broadcastBlock sends a newly mined block
-// to every registered peer.
+// broadcastBlock sends a new block to
+// every registered peer.
 func (server *NodeServer) broadcastBlock(
 	block *Block,
 ) {
@@ -512,7 +609,7 @@ func (server *NodeServer) handleSync(
 }
 
 // Sync checks all known peers and adopts
-// the longest valid chain found.
+// the longest valid chain.
 func (server *NodeServer) Sync() (
 	bool,
 	string,
@@ -559,8 +656,7 @@ func (server *NodeServer) Sync() (
 	return true, bestPeer, nil
 }
 
-// fetchPeerChain retrieves the full chain
-// from another peer.
+// fetchPeerChain retrieves another node's chain.
 func (server *NodeServer) fetchPeerChain(
 	peer string,
 ) ([]*Block, error) {
@@ -608,7 +704,7 @@ func (server *NodeServer) fetchPeerChain(
 }
 
 // replaceChain persists and activates
-// a synchronized replacement chain.
+// a synchronized blockchain.
 func (server *NodeServer) replaceChain(
 	blocks []*Block,
 ) error {
