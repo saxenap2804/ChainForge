@@ -40,11 +40,7 @@ func main() {
 		startNode(os.Args[2:])
 
 	default:
-		fmt.Printf(
-			"Unknown command: %s\n\n",
-			os.Args[1],
-		)
-
+		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
 		printUsage()
 	}
 }
@@ -59,15 +55,11 @@ func printUsage() {
 	fmt.Println("  fund --address ADDRESS --amount AMOUNT")
 	fmt.Println("  send --from ADDRESS --to ADDRESS --amount AMOUNT")
 	fmt.Println("  printchain")
-	fmt.Println("  startnode --port PORT")
+	fmt.Println("  startnode --port PORT --db DATABASE")
 }
 
-// createWallet generates a new ECDSA wallet
-// and persists it to wallets.json.
 func createWallet() {
-	store := blockchain.NewWalletStore(
-		walletPath,
-	)
+	store := blockchain.NewWalletStore(walletPath)
 
 	wallets, err := store.Load()
 	if err != nil {
@@ -86,15 +78,9 @@ func createWallet() {
 	}
 
 	fmt.Println("Wallet created successfully.")
-
-	fmt.Printf(
-		"Address: %s\n",
-		wallet.Address,
-	)
+	fmt.Printf("Address: %s\n", wallet.Address)
 }
 
-// getBalance prints the current balance
-// of a blockchain address.
 func getBalance(args []string) {
 	command := flag.NewFlagSet(
 		"balance",
@@ -112,27 +98,19 @@ func getBalance(args []string) {
 	}
 
 	if *address == "" {
-		log.Fatal(
-			"--address is required",
-		)
+		log.Fatal("--address is required")
 	}
 
 	chain := openChain()
 	defer closeChain(chain)
 
-	balance := chain.BalanceOf(
-		*address,
-	)
-
 	fmt.Printf(
 		"Balance of %s: %.2f coins\n",
 		*address,
-		balance,
+		chain.BalanceOf(*address),
 	)
 }
 
-// fundAddress creates a coinbase transaction
-// that assigns new coins to an address.
 func fundAddress(args []string) {
 	command := flag.NewFlagSet(
 		"fund",
@@ -156,15 +134,11 @@ func fundAddress(args []string) {
 	}
 
 	if *address == "" {
-		log.Fatal(
-			"--address is required",
-		)
+		log.Fatal("--address is required")
 	}
 
 	if *amount <= 0 {
-		log.Fatal(
-			"--amount must be greater than zero",
-		)
+		log.Fatal("--amount must be greater than zero")
 	}
 
 	chain := openChain()
@@ -180,9 +154,7 @@ func fundAddress(args []string) {
 	}
 
 	if err := chain.AddBlock(
-		[]blockchain.Transaction{
-			tx,
-		},
+		[]blockchain.Transaction{tx},
 	); err != nil {
 		log.Fatal(err)
 	}
@@ -199,8 +171,6 @@ func fundAddress(args []string) {
 	)
 }
 
-// sendCoins creates, signs, validates,
-// mines, and persists a transaction.
 func sendCoins(args []string) {
 	command := flag.NewFlagSet(
 		"send",
@@ -230,26 +200,18 @@ func sendCoins(args []string) {
 	}
 
 	if *from == "" {
-		log.Fatal(
-			"--from is required",
-		)
+		log.Fatal("--from is required")
 	}
 
 	if *to == "" {
-		log.Fatal(
-			"--to is required",
-		)
+		log.Fatal("--to is required")
 	}
 
 	if *amount <= 0 {
-		log.Fatal(
-			"--amount must be greater than zero",
-		)
+		log.Fatal("--amount must be greater than zero")
 	}
 
-	store := blockchain.NewWalletStore(
-		walletPath,
-	)
+	store := blockchain.NewWalletStore(walletPath)
 
 	wallets, err := store.Load()
 	if err != nil {
@@ -259,9 +221,7 @@ func sendCoins(args []string) {
 	senderWallet, exists := wallets[*from]
 
 	if !exists {
-		log.Fatal(
-			"sender wallet not found",
-		)
+		log.Fatal("sender wallet not found")
 	}
 
 	chain := openChain()
@@ -277,23 +237,17 @@ func sendCoins(args []string) {
 		log.Fatal(err)
 	}
 
-	if err := tx.Sign(
-		senderWallet,
-	); err != nil {
+	if err := tx.Sign(senderWallet); err != nil {
 		log.Fatal(err)
 	}
 
 	if err := chain.AddBlock(
-		[]blockchain.Transaction{
-			tx,
-		},
+		[]blockchain.Transaction{tx},
 	); err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(
-		"Transaction added successfully.",
-	)
+	fmt.Println("Transaction added successfully.")
 
 	fmt.Printf(
 		"%s -> %s : %.2f coins\n",
@@ -313,8 +267,6 @@ func sendCoins(args []string) {
 	)
 }
 
-// printBlockchain displays every block
-// currently stored in the chain.
 func printBlockchain() {
 	chain := openChain()
 	defer closeChain(chain)
@@ -333,30 +285,11 @@ func printBlockchain() {
 	)
 
 	for index, block := range chain.Blocks {
-		fmt.Printf(
-			"\nBlock %d\n",
-			index,
-		)
-
-		fmt.Printf(
-			"Timestamp: %d\n",
-			block.Timestamp,
-		)
-
-		fmt.Printf(
-			"Previous Hash: %x\n",
-			block.PrevBlockHash,
-		)
-
-		fmt.Printf(
-			"Nonce: %d\n",
-			block.Nonce,
-		)
-
-		fmt.Printf(
-			"Hash: %x\n",
-			block.Hash,
-		)
+		fmt.Printf("\nBlock %d\n", index)
+		fmt.Printf("Timestamp: %d\n", block.Timestamp)
+		fmt.Printf("Previous Hash: %x\n", block.PrevBlockHash)
+		fmt.Printf("Nonce: %d\n", block.Nonce)
+		fmt.Printf("Hash: %x\n", block.Hash)
 
 		fmt.Println("Transactions:")
 
@@ -376,7 +309,6 @@ func printBlockchain() {
 	}
 }
 
-// startNode starts the ChainForge HTTP node server.
 func startNode(args []string) {
 	command := flag.NewFlagSet(
 		"startnode",
@@ -389,6 +321,12 @@ func startNode(args []string) {
 		"HTTP node port",
 	)
 
+	dbPath := command.String(
+		"db",
+		databasePath,
+		"blockchain database path",
+	)
+
 	if err := command.Parse(args); err != nil {
 		log.Fatal(err)
 	}
@@ -399,7 +337,14 @@ func startNode(args []string) {
 		)
 	}
 
-	chain := openChain()
+	chain, err := blockchain.OpenBlockchain(
+		*dbPath,
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	defer closeChain(chain)
 
 	server := blockchain.NewNodeServer(
@@ -412,7 +357,6 @@ func startNode(args []string) {
 	}
 }
 
-// openChain opens the persistent blockchain.
 func openChain() *blockchain.Blockchain {
 	chain, err := blockchain.OpenBlockchain(
 		databasePath,
@@ -425,7 +369,6 @@ func openChain() *blockchain.Blockchain {
 	return chain
 }
 
-// closeChain safely closes persistent storage.
 func closeChain(
 	chain *blockchain.Blockchain,
 ) {
