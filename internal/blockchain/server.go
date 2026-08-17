@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,6 +61,11 @@ func (server *NodeServer) Start() error {
 		server.handleFund,
 	)
 
+	mux.HandleFunc(
+		"/blocks",
+		server.handleBlocks,
+	)
+
 	address := fmt.Sprintf(
 		":%d",
 		server.Port,
@@ -76,7 +82,7 @@ func (server *NodeServer) Start() error {
 	)
 }
 
-// handleHealth reports node status.
+// handleHealth returns basic node health information.
 func (server *NodeServer) handleHealth(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -101,7 +107,7 @@ func (server *NodeServer) handleHealth(
 	)
 }
 
-// handleChain returns the complete local blockchain.
+// handleChain returns the full local blockchain.
 func (server *NodeServer) handleChain(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -188,10 +194,8 @@ func (server *NodeServer) handlePeers(
 	}
 }
 
-// handleFund creates a network-issued coinbase
-// transaction and mines it directly on this node.
-//
-// POST /fund
+// handleFund creates a coinbase transaction,
+// mines a local block, then broadcasts that block.
 func (server *NodeServer) handleFund(
 	writer http.ResponseWriter,
 	request *http.Request,
@@ -266,6 +270,12 @@ func (server *NodeServer) handleFund(
 		return
 	}
 
+	newBlock := server.Chain.Blocks[len(server.Chain.Blocks)-1]
+
+	server.broadcastBlock(
+		newBlock,
+	)
+
 	writeJSON(
 		writer,
 		http.StatusCreated,
@@ -283,8 +293,185 @@ func (server *NodeServer) handleFund(
 	)
 }
 
-// handleSync checks known peers and adopts
-// the longest valid chain.
+// handleBlocks receives a newly mined block
+// from another peer.
+//
+// POST /blocks
+func (server *NodeServer) handleBlocks(
+	writer http.ResponseWriter,
+	request *http.Request,
+) {
+	if request.Method != http.MethodPost {
+		http.Error(
+			writer,
+			"method not allowed",
+			http.StatusMethodNotAllowed,
+		)
+		return
+	}
+
+	var block Block
+
+	if err := json.NewDecoder(
+		request.Body,
+	).Decode(&block); err != nil {
+		http.Error(
+			writer,
+			"invalid block payload",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	if err := server.acceptBlock(
+		&block,
+	); err != nil {
+		http.Error(
+			writer,
+			err.Error(),
+			http.StatusConflict,
+		)
+		return
+	}
+
+	writeJSON(
+		writer,
+		http.StatusCreated,
+		map[string]any{
+			"status": "accepted",
+			"hash": fmt.Sprintf(
+				"%x",
+				block.Hash,
+			),
+			"blocks": len(
+				server.Chain.Blocks,
+			),
+		},
+	)
+}
+
+// acceptBlock validates and appends a block
+// received from a peer.
+func (server *NodeServer) acceptBlock(
+	block *Block,
+) error {
+	if block == nil {
+		return errors.New(
+			"block cannot be nil",
+		)
+	}
+
+	if len(server.Chain.Blocks) == 0 {
+		return errors.New(
+			"local blockchain is empty",
+		)
+	}
+
+	latest := server.Chain.Blocks[len(server.Chain.Blocks)-1]
+
+	if !bytes.Equal(
+		block.PrevBlockHash,
+		latest.Hash,
+	) {
+		return errors.New(
+			"block does not extend local chain",
+		)
+	}
+
+	for _, tx := range block.Transactions {
+		if err := tx.Validate(); err != nil {
+			return err
+		}
+
+		if tx.ID != tx.calculateID() {
+			return errors.New(
+				"invalid transaction ID",
+			)
+		}
+
+		if !tx.IsCoinbase() && !tx.Verify() {
+			return errors.New(
+				"invalid transaction signature",
+			)
+		}
+	}
+
+	pow := NewProofOfWork(
+		block,
+	)
+
+	if !pow.Validate() {
+		return errors.New(
+			"invalid proof of work",
+		)
+	}
+
+	if server.Chain.Storage != nil {
+		if err := server.Chain.Storage.SaveBlock(
+			block,
+		); err != nil {
+			return err
+		}
+	}
+
+	server.Chain.Blocks = append(
+		server.Chain.Blocks,
+		block,
+	)
+
+	return nil
+}
+
+// broadcastBlock sends a newly mined block
+// to every registered peer.
+func (server *NodeServer) broadcastBlock(
+	block *Block,
+) {
+	if block == nil {
+		return
+	}
+
+	payload, err := json.Marshal(
+		block,
+	)
+
+	if err != nil {
+		fmt.Printf(
+			"failed to serialize block: %v\n",
+			err,
+		)
+		return
+	}
+
+	for _, peer := range server.Peers.List() {
+		response, err := server.Client.Post(
+			peer+"/blocks",
+			"application/json",
+			bytes.NewReader(payload),
+		)
+
+		if err != nil {
+			fmt.Printf(
+				"failed to broadcast block to %s: %v\n",
+				peer,
+				err,
+			)
+			continue
+		}
+
+		response.Body.Close()
+
+		if response.StatusCode != http.StatusCreated {
+			fmt.Printf(
+				"peer %s rejected block with status %d\n",
+				peer,
+				response.StatusCode,
+			)
+		}
+	}
+}
+
+// handleSync triggers longest-valid-chain synchronization.
 //
 // POST /sync
 func (server *NodeServer) handleSync(
@@ -324,8 +511,8 @@ func (server *NodeServer) handleSync(
 	)
 }
 
-// Sync checks all known peers and replaces the
-// local chain with the longest valid chain found.
+// Sync checks all known peers and adopts
+// the longest valid chain found.
 func (server *NodeServer) Sync() (
 	bool,
 	string,
@@ -343,7 +530,6 @@ func (server *NodeServer) Sync() (
 			continue
 		}
 
-		// Ignore chains that are not longer.
 		if len(blocks) <= len(bestBlocks) {
 			continue
 		}
@@ -373,7 +559,8 @@ func (server *NodeServer) Sync() (
 	return true, bestPeer, nil
 }
 
-// fetchPeerChain downloads a peer's blockchain.
+// fetchPeerChain retrieves the full chain
+// from another peer.
 func (server *NodeServer) fetchPeerChain(
 	peer string,
 ) ([]*Block, error) {
@@ -420,7 +607,8 @@ func (server *NodeServer) fetchPeerChain(
 	return payload.Blocks, nil
 }
 
-// replaceChain stores and activates a synchronized chain.
+// replaceChain persists and activates
+// a synchronized replacement chain.
 func (server *NodeServer) replaceChain(
 	blocks []*Block,
 ) error {
@@ -440,8 +628,6 @@ func (server *NodeServer) replaceChain(
 		)
 	}
 
-	// Persist synchronized blocks when this node
-	// is using persistent storage.
 	if server.Chain.Storage != nil {
 		for _, block := range blocks {
 			if err := server.Chain.Storage.SaveBlock(
@@ -457,7 +643,7 @@ func (server *NodeServer) replaceChain(
 	return nil
 }
 
-// writeJSON writes a JSON HTTP response.
+// writeJSON writes a JSON response.
 func writeJSON(
 	writer http.ResponseWriter,
 	status int,
@@ -468,7 +654,9 @@ func writeJSON(
 		"application/json",
 	)
 
-	writer.WriteHeader(status)
+	writer.WriteHeader(
+		status,
+	)
 
 	if err := json.NewEncoder(
 		writer,
