@@ -1,4 +1,14 @@
 {
+  "28da9a9a9dd631d561aa4562c1024d1f1f373f31": {
+    "d": "Iw9kiMa+TkTZmSXxFg/JFoWmIt55/eakcgZSDpnJUDY=",
+    "public_key": "BI2xGbC6hbr8GSah2ey2fh2DA5UsJEqK6cJ2BGpx5T+vnYr3YkO0Y/8Q6ktYtyewVxTiBuDMbRBQrdppxA+55ps=",
+    "address": "28da9a9a9dd631d561aa4562c1024d1f1f373f31"
+  },
+  "6b9dd24a085fddfe07335a74f5454f460cb955d8": {
+    "d": "SpRCCr1p+qIn+vBDTXjEtmXji/vbLspftAQ+ACIPXJ8=",
+    "public_key": "BFvv4qzyn0ysC8au7HkN1ZBHlrJX35T/Ah6JyXzjOUgxYacQwNKYtsD/v/VWu7v+YvW4yE8etJCwnmYBpfrPvlQ=",
+    "address": "6b9dd24a085fddfe07335a74f5454f460cb955d8"
+  },
   "7f36363180b11b7d8048ab2ba7de20191d618a43": {
     "d": "8AZLTfai4vnfa0wiiPevFf7Eg8NyaBjyeup7nkJ88bA=",
     "public_key": "BH6GqY75mG7tdmb9rrbaMu0MZjY0Nz4N+HJn5CWgxECLSauVXufXCJc+vtv244MzvbAoRZyCpyeYKzoDK7P+8u4=",

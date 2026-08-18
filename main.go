@@ -581,6 +581,15 @@ func printBlockchain() {
 
 // startNode starts an HTTP node using
 // the specified blockchain database.
+// startNode starts an HTTP node using
+// the specified blockchain database.
+//
+// Peers can be configured automatically with
+// CHAINFORGE_PEERS as a comma-separated list.
+//
+// Example:
+//
+// CHAINFORGE_PEERS=http://node-b:8081,http://node-c:8082
 func startNode(args []string) {
 	command := flag.NewFlagSet(
 		"startnode",
@@ -624,12 +633,86 @@ func startNode(args []string) {
 		*port,
 	)
 
+	// ------------------------------------------------
+	// Automatically register peers from environment.
+	// ------------------------------------------------
+
+	peerEnv := strings.TrimSpace(
+		os.Getenv("CHAINFORGE_PEERS"),
+	)
+
+	if peerEnv != "" {
+		for _, peer := range strings.Split(
+			peerEnv,
+			",",
+		) {
+			peer = strings.TrimSpace(peer)
+
+			if peer == "" {
+				continue
+			}
+
+			if err := server.Peers.Add(peer); err != nil {
+				log.Printf(
+					"Could not register peer %s: %v",
+					peer,
+					err,
+				)
+
+				continue
+			}
+
+			log.Printf(
+				"Registered peer: %s",
+				peer,
+			)
+		}
+	}
+
+	// ------------------------------------------------
+	// Initial synchronization.
+	//
+	// Docker services may not become available at
+	// exactly the same moment, so retry briefly.
+	// ------------------------------------------------
+
+	if len(server.Peers.List()) > 0 {
+		go func() {
+			for attempt := 1; attempt <= 5; attempt++ {
+				time.Sleep(2 * time.Second)
+
+				updated, peer, err := server.Sync()
+
+				if err != nil {
+					log.Printf(
+						"Initial sync attempt %d failed: %v",
+						attempt,
+						err,
+					)
+
+					continue
+				}
+
+				if updated {
+					log.Printf(
+						"Blockchain synchronized from %s",
+						peer,
+					)
+				}
+
+				log.Printf(
+					"Sync attempt %d complete. Blocks: %d",
+					attempt,
+					len(server.Chain.Blocks),
+				)
+			}
+		}()
+	}
+
 	if err := server.Start(); err != nil {
 		log.Fatal(err)
 	}
 }
-
-// openChain opens the default ChainForge database.
 func openChain() *blockchain.Blockchain {
 	chain, err := blockchain.OpenBlockchain(
 		databasePath,
@@ -642,7 +725,6 @@ func openChain() *blockchain.Blockchain {
 	return chain
 }
 
-// closeChain safely closes blockchain storage.
 func closeChain(
 	chain *blockchain.Blockchain,
 ) {
