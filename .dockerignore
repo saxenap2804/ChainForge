@@ -1,0 +1,14 @@
+.git
+.github
+
+*.db
+*.db-shm
+*.db-wal
+*.db.lock
+
+wallets.json
+
+chainforge
+chainforge.exe
+
+README.md
